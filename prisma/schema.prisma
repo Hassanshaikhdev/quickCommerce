@@ -1,0 +1,227 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(AGENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  stores    Store[]
+  orders    Order[]
+  botSessions BotSession[]
+
+  @@map("users")
+}
+
+model Store {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  address     String
+  city        String
+  state       String
+  zipCode     String
+  phone       String
+  email       String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  managerId   String   @db.ObjectId
+  manager     User     @relation(fields: [managerId], references: [id])
+  categories  Category[]
+  inventory   InventoryItem[]
+  orders      Order[]
+
+  @@map("stores")
+}
+
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  storeId     String   @db.ObjectId
+  store       Store    @relation(fields: [storeId], references: [id])
+  items       InventoryItem[]
+
+  @@map("categories")
+}
+
+model InventoryItem {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  sku         String   @unique
+  barcode     String?
+  price       Float
+  costPrice   Float
+  stockQuantity Int
+  minStockLevel Int    @default(10)
+  unit        String   // e.g., "kg", "pieces", "liters"
+  weight      Float?   // in grams
+  dimensions  Json?    // {length, width, height}
+  images      String[] // Array of image URLs
+  isActive    Boolean  @default(true)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  storeId     String   @db.ObjectId
+  store       Store    @relation(fields: [storeId], references: [id])
+  categoryId  String   @db.ObjectId
+  category    Category @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+
+  @@map("inventory_items")
+}
+
+model Order {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber   String      @unique
+  status        OrderStatus @default(PENDING)
+  subtotal      Float
+  tax           Float
+  deliveryFee   Float
+  total         Float
+  deliveryAddress String
+  deliveryInstructions String?
+  estimatedDelivery DateTime?
+  actualDelivery   DateTime?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  customerId    String      @db.ObjectId
+  customer      User        @relation(fields: [customerId], references: [id])
+  storeId       String      @db.ObjectId
+  store         Store       @relation(fields: [storeId], references: [id])
+  items         OrderItem[]
+  botSession    BotSession?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  quantity  Int
+  unitPrice Float
+  total     Float
+  notes     String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  orderId       String        @db.ObjectId
+  order         Order         @relation(fields: [orderId], references: [id])
+  inventoryItemId String      @db.ObjectId
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("order_items")
+}
+
+model BotSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId String   @unique
+  status    BotSessionStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agentId   String   @db.ObjectId
+  agent     User     @relation(fields: [agentId], references: [id])
+  orderId   String?  @unique @db.ObjectId
+  order     Order?   @relation(fields: [orderId], references: [id])
+  messages  BotMessage[]
+
+  @@map("bot_sessions")
+}
+
+model BotMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  content   String
+  type      MessageType
+  metadata  Json?    // Store parsed data, suggestions, etc.
+  createdAt DateTime @default(now())
+
+  // Relations
+  sessionId String      @db.ObjectId
+  session   BotSession  @relation(fields: [sessionId], references: [id])
+
+  @@map("bot_messages")
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+enum UserRole {
+  ADMIN
+  STORE_MANAGER
+  DELIVERY_AGENT
+  AGENT
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum BotSessionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MessageType {
+  USER
+  BOT
+  SYSTEM
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  STOCK_ALERT
+  DELIVERY_UPDATE
+  SYSTEM
+} 
