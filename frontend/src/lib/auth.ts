@@ -1,79 +1,69 @@
+import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { User, UserRole } from '@/types';
+import { prisma } from './db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JWTPayload {
   userId: string;
   email: string;
-  role: UserRole;
-  iat?: number;
-  exp?: number;
+  role: string;
+  iat: number;
+  exp: number;
 }
 
-export const hashPassword = async (password: string): Promise<string> => {
-  const saltRounds = 12;
-  return bcrypt.hash(password, saltRounds);
-};
-
-export const comparePassword = async (password: string, hashedPassword: string): Promise<boolean> => {
-  return bcrypt.compare(password, hashedPassword);
-};
-
-export const generateToken = (user: Pick<User, 'id' | 'email' | 'role'>): string => {
-  const payload: JWTPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  };
-
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-};
-
-export const verifyToken = (token: string): JWTPayload | null => {
+export async function requireAuth(request: NextRequest) {
   try {
+    const token = request.headers.get('authorization')?.replace('Bearer ', '') ||
+                  request.cookies.get('token')?.value;
+
+    if (!token) {
+      return null;
+    }
+
     const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-    return decoded;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
+
+    if (!user || !user.isActive) {
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error('Auth error:', error);
+    return null;
+  }
+}
+
+export function generateToken(user: { id: string; email: string; role: string }) {
+  return jwt.sign(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+export function verifyToken(token: string): JWTPayload | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     return null;
   }
-};
+}
 
-export const extractTokenFromHeader = (authorization?: string): string | null => {
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return null;
-  }
-  return authorization.substring(7);
-};
+export async function hashPassword(password: string): Promise<string> {
+  const bcrypt = await import('bcryptjs');
+  return bcrypt.hash(password, 12);
+}
 
-export const requireAuth = (req: any, res: any, next: any) => {
-  const token = extractTokenFromHeader(req.headers.authorization);
-  
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Access token required' });
-  }
-
-  const payload = verifyToken(token);
-  if (!payload) {
-    return res.status(401).json({ success: false, error: 'Invalid or expired token' });
-  }
-
-  req.user = payload;
-  next();
-};
-
-export const requireRole = (roles: UserRole[]) => {
-  return (req: any, res: any, next: any) => {
-    if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Authentication required' });
-    }
-
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
-    }
-
-    next();
-  };
-}; 
+export async function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
+  const bcrypt = await import('bcryptjs');
+  return bcrypt.compare(password, hashedPassword);
+} 

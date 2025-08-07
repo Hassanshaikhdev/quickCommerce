@@ -20,7 +20,7 @@ const createOrderSchema = z.object({
     country: z.string().min(1, 'Country is required'),
   }),
   deliveryInstructions: z.string().optional(),
-  paymentMethod: z.enum(['COD', 'CARD', 'UPI', 'WALLET', 'NET_BANKING']).default('COD'),
+  paymentMethod: z.enum(['CASH_ON_DELIVERY', 'CREDIT_CARD', 'DEBIT_CARD', 'UPI', 'NET_BANKING', 'WALLET']).default('CASH_ON_DELIVERY'),
 });
 
 export async function POST(request: NextRequest) {
@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
 
     // Check stock availability
     const stockIssues = orderData.items.filter(orderItem => {
-      const inventoryItem = inventoryItems.find(item => item.id === orderItem.itemId);
-      return !inventoryItem || inventoryItem.quantityAvailable < orderItem.quantity;
+      const inventoryItem = inventoryItems.find((item:any) => item.id === orderItem.itemId);
+      return !inventoryItem || inventoryItem.stockQuantity < orderItem.quantity;
     });
 
     if (stockIssues.length > 0) {
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const orderItems = [];
 
     for (const orderItem of orderData.items) {
-      const inventoryItem = inventoryItems.find(item => item.id === orderItem.itemId);
+      const inventoryItem = inventoryItems.find((item:any) => item.id === orderItem.itemId);
       if (!inventoryItem) continue;
 
       const itemTotal = Number(inventoryItem.price) * orderItem.quantity;
@@ -89,10 +89,9 @@ export async function POST(request: NextRequest) {
 
       orderItems.push({
         inventoryItemId: orderItem.itemId,
-        name: inventoryItem.name,
         quantity: orderItem.quantity,
         unitPrice: Number(inventoryItem.price),
-        totalPrice: itemTotal,
+        total: itemTotal,
         notes: orderItem.notes,
       });
     }
@@ -100,32 +99,34 @@ export async function POST(request: NextRequest) {
     // Calculate additional costs
     const tax = subtotal * 0.05; // 5% tax
     const deliveryFee = subtotal > 500 ? 0 : 50; // Free delivery above ₹500
-    const discount = 0; // No discount for bot orders initially
-    const total = subtotal + tax + deliveryFee - discount;
+    const total = subtotal + tax + deliveryFee;
 
     // Create the order
     const order = await prisma.order.create({
       data: {
+        orderNumber: `ORD-${Date.now()}`,
         customerId: orderData.customerId,
         storeId: orderData.storeId,
-        agentId: orderData.agentId,
-        status: 'PENDING_CONFIRMATION',
+        status: 'PENDING',
         subtotal,
         tax,
         deliveryFee,
-        discount,
         total,
         paymentMethod: orderData.paymentMethod,
         paymentStatus: 'PENDING',
-        deliveryAddress: orderData.deliveryAddress,
+        deliveryAddress: `${orderData.deliveryAddress.street}, ${orderData.deliveryAddress.city}, ${orderData.deliveryAddress.state} ${orderData.deliveryAddress.zipCode}`,
         deliveryInstructions: orderData.deliveryInstructions,
-        estimatedDeliveryTime: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
+        estimatedDelivery: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
         items: {
           create: orderItems,
         },
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            inventoryItem: true,
+          },
+        },
         customer: {
           select: { name: true, email: true, phone: true },
         },
@@ -140,7 +141,7 @@ export async function POST(request: NextRequest) {
       await prisma.inventoryItem.update({
         where: { id: orderItem.itemId },
         data: {
-          quantityAvailable: {
+          stockQuantity: {
             decrement: orderItem.quantity,
           },
         },
@@ -148,20 +149,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate bot response
-    const botResponse = await botService.generateBotResponse(
-      `Order created successfully! Order ID: ${order.id}. Total: ₹${total}. Estimated delivery: 30 minutes.`,
-      'temp-session',
-      orderData.storeId
-    );
+    const botResponse = `Order created successfully! Order ID: ${order.orderNumber}. Total: ₹${total.toFixed(2)}. Estimated delivery: 30 minutes.`;
 
-    // Save bot response
-    await botService.saveBotMessage(
-      'temp-session',
-      orderData.agentId,
-      orderData.storeId,
-      botResponse,
-      'BOT'
-    );
+    // Save bot response (optional)
+    try {
+      await botService.saveBotMessage(
+        `session-${Date.now()}`, // Create a unique session ID
+        orderData.agentId,
+        orderData.storeId,
+        botResponse,
+        'BOT'
+      );
+    } catch (error) {
+      console.error('Error saving bot response:', error);
+    }
 
     return NextResponse.json({
       success: true,

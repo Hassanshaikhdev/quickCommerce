@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import Navigation from '@/components/navigation';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -65,7 +66,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          {children}
+          <div className="min-h-screen bg-gray-50">
+            <Navigation />
+            <main>
+              {children}
+            </main>
+          </div>
         </Providers>
       </body>
     </html>

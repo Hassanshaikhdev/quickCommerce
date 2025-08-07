@@ -13,7 +13,7 @@ export interface BotConfig {
 }
 
 const DEFAULT_CONFIG: BotConfig = {
-  model: 'gpt-4',
+  model: 'gpt-3.5-turbo', // Use a more reliable model
   maxTokens: 1000,
   temperature: 0.1,
 };
@@ -63,7 +63,7 @@ export class BotService {
       const parsedResponse = JSON.parse(response);
       
       // Validate and enhance with inventory data
-      const enhancedItems = await this.enhanceWithInventory(parsedResponse.items, inventory);
+      const enhancedItems = await this.enhanceWithInventory(parsedResponse.items || [], inventory);
       
       // Calculate total amount
       const totalAmount = enhancedItems.reduce((sum, item) => {
@@ -82,8 +82,36 @@ export class BotService {
       };
     } catch (error) {
       console.error('Error parsing order request:', error);
-      throw new Error('Failed to parse order request');
+      // Return a fallback response if OpenAI fails
+      return this.createFallbackResponse(message);
     }
+  }
+
+  private createFallbackResponse(message: string): ParsedOrderRequest {
+    // Simple fallback parsing logic
+    const words = message.toLowerCase().split(' ');
+    const items: ParsedItem[] = [];
+    
+    // Basic parsing logic for common items
+    const commonItems = ['milk', 'bread', 'rice', 'atta', 'banana', 'tomato', 'water', 'soap'];
+    
+    for (const word of words) {
+      if (commonItems.includes(word)) {
+        items.push({
+          name: word,
+          quantity: 1,
+          unit: 'piece',
+          confidence: 0.5,
+        });
+      }
+    }
+
+    return {
+      items,
+      totalAmount: 0,
+      confidence: 0.3,
+      alternatives: [],
+    };
   }
 
   private createParsingPrompt(message: string, inventory: InventoryItem[]): string {
@@ -98,70 +126,69 @@ Parse the following grocery order request into structured JSON format.
 Available items in store:
 ${inventoryContext}
 
-User message: "${message}"
+User request: "${message}"
 
-Please extract items with the following structure:
+Please return a JSON object with the following structure:
 {
   "items": [
     {
       "name": "item name",
       "quantity": number,
-      "unit": "unit of measurement"
+      "unit": "kg/liter/piece/etc"
     }
   ],
-  "confidence": 0.0-1.0
+  "confidence": number between 0 and 1
 }
 
-Rules:
-1. Normalize units (e.g., "packets" -> "packet", "litres" -> "l", "kilos" -> "kg")
-2. Extract brand names when mentioned
-3. Handle common abbreviations and typos
-4. Return only valid JSON
-`;
+Only return valid JSON, no additional text.`;
   }
 
   private async getStoreInventory(storeId: string): Promise<InventoryItem[]> {
-    const items = await prisma.inventoryItem.findMany({
-      where: {
-        storeId,
-        isActive: true,
-        stockQuantity: { gt: 0 },
-      },
-      select: {
-        id: true,
-        name: true,
-        unit: true,
-        price: true,
-        category: {
-          select: { name: true }
+    try {
+      const inventory = await prisma.inventoryItem.findMany({
+        where: {
+          storeId,
+          isActive: true,
+          isAvailable: true,
         },
-      },
-    });
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          unit: true,
+          stockQuantity: true,
+          brand: true,
+          tags: true,
+        },
+        take: 100, // Limit to 100 items for context
+      });
 
-    return items.map(item => ({
-      ...item,
-      price: Number(item.price),
-      category: item.category.name,
-    }));
+      return inventory;
+    } catch (error) {
+      console.error('Error fetching store inventory:', error);
+      return [];
+    }
   }
 
   private async enhanceWithInventory(
     parsedItems: any[],
     inventory: InventoryItem[]
   ): Promise<ParsedItem[]> {
-    return parsedItems.map(item => {
-      // Find best match in inventory
-      const match = this.findBestMatch(item.name, inventory);
+    const enhancedItems: ParsedItem[] = [];
+
+    for (const item of parsedItems) {
+      const matchedItem = this.findBestMatch(item.name, inventory);
       
-      return {
+      enhancedItems.push({
         name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        matchedItemId: match?.id,
-        confidence: match ? 0.9 : 0.3,
-        alternatives: match ? [] : this.findSimilarItems(item.name, inventory),
-      };
-    });
+        quantity: item.quantity || 1,
+        unit: item.unit || 'piece',
+        matchedItemId: matchedItem?.id,
+        confidence: matchedItem ? 0.9 : 0.3,
+      });
+    }
+
+    return enhancedItems;
   }
 
   private findBestMatch(itemName: string, inventory: InventoryItem[]): InventoryItem | null {
@@ -172,46 +199,53 @@ Rules:
       item.name.toLowerCase().includes(normalizedName) ||
       normalizedName.includes(item.name.toLowerCase())
     );
-    
+
     if (match) return match;
 
-    // Fuzzy match (simple implementation)
-    const words = normalizedName.split(' ');
-    match = inventory.find(item => {
-      const itemWords = item.name.toLowerCase().split(' ');
-      return words.some(word => 
-        itemWords.some(itemWord => 
-          itemWord.includes(word) || word.includes(itemWord)
-        )
-      );
-    });
+    // Partial match
+    match = inventory.find(item => 
+      item.name.toLowerCase().split(' ').some(word => 
+        normalizedName.includes(word) || word.includes(normalizedName)
+      )
+    );
+
+    if (match) return match;
+
+    // Brand match
+    match = inventory.find(item => 
+      item.brand && item.brand.toLowerCase().includes(normalizedName)
+    );
 
     return match || null;
   }
 
   private findSimilarItems(itemName: string, inventory: InventoryItem[]): AlternativeItem[] {
     const normalizedName = itemName.toLowerCase();
-    const words = normalizedName.split(' ');
-    
-    const similar = inventory
-      .filter(item => {
-        const itemWords = item.name.toLowerCase().split(' ');
-        return words.some(word => 
-          itemWords.some(itemWord => 
-            itemWord.includes(word) || word.includes(itemWord)
-          )
-        );
-      })
-      .slice(0, 3)
-      .map(item => ({
-        itemId: item.id,
-        name: item.name,
-        price: item.price,
-        reason: `Similar to "${itemName}"`,
-        confidence: 0.6,
-      }));
+    const similar: AlternativeItem[] = [];
 
-    return similar;
+    for (const item of inventory) {
+      const itemNameLower = item.name.toLowerCase();
+      const similarity = this.calculateSimilarity(normalizedName, itemNameLower);
+      
+      if (similarity > 0.3) {
+        similar.push({
+          itemId: item.id,
+          name: item.name,
+          price: item.price,
+          reason: `Similar to "${itemName}"`,
+          confidence: similarity,
+        });
+      }
+    }
+
+    return similar.slice(0, 3); // Return top 3 similar items
+  }
+
+  private calculateSimilarity(str1: string, str2: string): number {
+    const words1 = str1.split(' ');
+    const words2 = str2.split(' ');
+    const commonWords = words1.filter(word => words2.includes(word));
+    return commonWords.length / Math.max(words1.length, words2.length);
   }
 
   private async findAlternatives(
@@ -253,7 +287,7 @@ Rules:
       // Create context-aware prompt
       const context = session.messages
         .reverse()
-        .map(msg => `${msg.type === 'USER' ? 'User' : 'Bot'}: ${msg.content}`)
+        .map((msg: { type: string; content: string }) => `${msg.type === 'USER' ? 'User' : 'Bot'}: ${msg.content}`)
         .join('\n');
 
       const prompt = `
@@ -298,14 +332,37 @@ Response:`;
     type: 'USER' | 'BOT',
     metadata?: Record<string, any>
   ): Promise<void> {
-    await prisma.botMessage.create({
-      data: {
-        sessionId,
-        content: message,
-        type,
-        metadata,
-      },
-    });
+    try {
+      // First, try to find or create the bot session
+      let session = await prisma.botSession.findUnique({
+        where: { id: sessionId },
+      });
+
+      if (!session) {
+        // Create a new session if it doesn't exist
+        session = await prisma.botSession.create({
+          data: {
+            id: sessionId,
+            sessionId: sessionId,
+            status: 'ACTIVE',
+            agentId,
+          },
+        });
+      }
+
+      // Now save the message
+      await prisma.botMessage.create({
+        data: {
+          sessionId: session.id,
+          content: message,
+          type,
+          metadata,
+        },
+      });
+    } catch (error) {
+      console.error('Error saving bot message:', error);
+      // Don't throw error, just log it
+    }
   }
 }
 

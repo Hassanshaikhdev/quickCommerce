@@ -15,15 +15,24 @@ model User {
   email     String   @unique
   password  String
   name      String
-  role      UserRole @default(AGENT)
+  role      UserRole @default(CUSTOMER)
   isActive  Boolean  @default(true)
+  phone     String?
+  address   String?
+  city      String?
+  state     String?
+  zipCode   String?
+  avatar    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  stores    Store[]
-  orders    Order[]
-  botSessions BotSession[]
+  stores        Store[]
+  orders        Order[]
+  botSessions   BotSession[]
+  cartItems     CartItem[]
+  reviews       Review[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -38,6 +47,8 @@ model Store {
   zipCode     String
   phone       String
   email       String
+  logo        String?
+  banner      String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -57,13 +68,18 @@ model Category {
   name        String
   description String?
   image       String?
+  slug        String   @unique
+  parentId    String?  @db.ObjectId
   isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   storeId     String   @db.ObjectId
   store       Store    @relation(fields: [storeId], references: [id])
+  parent      Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
   items       InventoryItem[]
 
   @@map("categories")
@@ -85,6 +101,11 @@ model InventoryItem {
   images      String[] // Array of image URLs
   isActive    Boolean  @default(true)
   isAvailable Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  brand       String?
+  tags        String[]
+  rating      Float    @default(0)
+  reviewCount Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -94,8 +115,26 @@ model InventoryItem {
   categoryId  String   @db.ObjectId
   category    Category @relation(fields: [categoryId], references: [id])
   orderItems  OrderItem[]
+  cartItems   CartItem[]
+  reviews     Review[]
 
   @@map("inventory_items")
+}
+
+model CartItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId         String        @db.ObjectId
+  user           User          @relation(fields: [userId], references: [id])
+  inventoryItemId String       @db.ObjectId
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([userId, inventoryItemId])
+  @@map("cart_items")
 }
 
 model Order {
@@ -111,6 +150,8 @@ model Order {
   estimatedDelivery DateTime?
   actualDelivery   DateTime?
   notes         String?
+  paymentMethod PaymentMethod @default(CASH_ON_DELIVERY)
+  paymentStatus PaymentStatus @default(PENDING)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -140,6 +181,24 @@ model OrderItem {
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
 
   @@map("order_items")
+}
+
+model Review {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  rating    Int      // 1-5 stars
+  comment   String?
+  isVerified Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId         String        @db.ObjectId
+  user           User          @relation(fields: [userId], references: [id])
+  inventoryItemId String       @db.ObjectId
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([userId, inventoryItemId])
+  @@map("reviews")
 }
 
 model BotSession {
@@ -204,6 +263,22 @@ enum OrderStatus {
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CREDIT_CARD
+  DEBIT_CARD
+  UPI
+  NET_BANKING
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
   REFUNDED
 }
 

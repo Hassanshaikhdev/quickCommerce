@@ -4,470 +4,347 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting database seeding...');
+  console.log('🌱 Starting database seed...');
 
-  // Clear existing data
-  await prisma.botMessage.deleteMany();
-  await prisma.botSession.deleteMany();
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.inventoryItem.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.store.deleteMany();
-  await prisma.user.deleteMany();
-
-  console.log('🗑️  Cleared existing data');
-
-  // Create users with different roles
-  const hashedPassword = await bcrypt.hash('password123', 12);
-
-  const admin = await prisma.user.create({
-    data: {
+  // Create admin user
+  const adminPassword = await bcrypt.hash('admin123', 10);
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@quickcommerce.com' },
+    update: {},
+    create: {
       email: 'admin@quickcommerce.com',
-      password: hashedPassword,
       name: 'Admin User',
+      password: adminPassword,
       role: 'ADMIN',
+      isActive: true,
     },
   });
 
-  const storeManager = await prisma.user.create({
-    data: {
+  // Create store manager
+  const managerPassword = await bcrypt.hash('manager123', 10);
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager@quickcommerce.com' },
+    update: {},
+    create: {
       email: 'manager@quickcommerce.com',
-      password: hashedPassword,
       name: 'Store Manager',
+      password: managerPassword,
       role: 'STORE_MANAGER',
+      isActive: true,
     },
   });
 
-  const deliveryAgent = await prisma.user.create({
-    data: {
-      email: 'delivery@quickcommerce.com',
-      password: hashedPassword,
-      name: 'Delivery Agent',
-      role: 'DELIVERY_AGENT',
-    },
-  });
-
-  const botAgent = await prisma.user.create({
-    data: {
-      email: 'bot@quickcommerce.com',
-      password: hashedPassword,
-      name: 'AI Bot Agent',
-      role: 'AGENT',
-    },
-  });
-
-  const customer = await prisma.user.create({
-    data: {
+  // Create customer
+  const customerPassword = await bcrypt.hash('customer123', 10);
+  const customer = await prisma.user.upsert({
+    where: { email: 'customer@quickcommerce.com' },
+    update: {},
+    create: {
       email: 'customer@quickcommerce.com',
-      password: hashedPassword,
-      name: 'John Customer',
+      name: 'John Doe',
+      password: customerPassword,
       role: 'CUSTOMER',
+      isActive: true,
+      phone: '+91-9876543210',
+      address: '123 Main Street',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      zipCode: '400001',
     },
   });
-
-  console.log('👥 Created users');
 
   // Create store
-  const store = await prisma.store.create({
-    data: {
-      name: 'QuickMart Express',
-      description: 'Your neighborhood quick commerce store',
-      address: '123 Main Street',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      phone: '+1-555-0123',
-      email: 'contact@quickmart.com',
-      managerId: storeManager.id,
+  const store = await prisma.store.upsert({
+    where: { email: 'store@quickcommerce.com' },
+    update: {},
+    create: {
+      name: 'QuickCommerce Store',
+      description: 'Your one-stop shop for all grocery needs',
+      address: '456 Shopping Center',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      zipCode: '400002',
+      phone: '+91-9876543211',
+      email: 'store@quickcommerce.com',
+      managerId: manager.id,
+      isActive: true,
     },
   });
-
-  console.log('🏪 Created store');
 
   // Create categories
   const categories = await Promise.all([
-    prisma.category.create({
-      data: {
+    prisma.category.upsert({
+      where: { slug: 'fruits-vegetables' },
+      update: {},
+      create: {
         name: 'Fruits & Vegetables',
         description: 'Fresh fruits and vegetables',
+        slug: 'fruits-vegetables',
         storeId: store.id,
+        isActive: true,
+        sortOrder: 1,
       },
     }),
-    prisma.category.create({
-      data: {
-        name: 'Dairy & Eggs',
-        description: 'Fresh dairy products and eggs',
+    prisma.category.upsert({
+      where: { slug: 'dairy-bakery' },
+      update: {},
+      create: {
+        name: 'Dairy & Bakery',
+        description: 'Fresh dairy products and bakery items',
+        slug: 'dairy-bakery',
         storeId: store.id,
+        isActive: true,
+        sortOrder: 2,
       },
     }),
-    prisma.category.create({
-      data: {
-        name: 'Bread & Bakery',
-        description: 'Fresh bread and bakery items',
+    prisma.category.upsert({
+      where: { slug: 'staples' },
+      update: {},
+      create: {
+        name: 'Staples',
+        description: 'Rice, wheat, pulses, and other staples',
+        slug: 'staples',
         storeId: store.id,
+        isActive: true,
+        sortOrder: 3,
       },
     }),
-    prisma.category.create({
-      data: {
+    prisma.category.upsert({
+      where: { slug: 'beverages' },
+      update: {},
+      create: {
         name: 'Beverages',
         description: 'Soft drinks, juices, and other beverages',
+        slug: 'beverages',
         storeId: store.id,
+        isActive: true,
+        sortOrder: 4,
       },
     }),
-    prisma.category.create({
-      data: {
-        name: 'Snacks',
-        description: 'Chips, cookies, and other snacks',
+    prisma.category.upsert({
+      where: { slug: 'personal-care' },
+      update: {},
+      create: {
+        name: 'Personal Care',
+        description: 'Personal care and hygiene products',
+        slug: 'personal-care',
         storeId: store.id,
+        isActive: true,
+        sortOrder: 5,
       },
     }),
   ]);
 
-  console.log('📂 Created categories');
-
-  // Create inventory items
-  const inventoryItems = await Promise.all([
+  // Create products
+  const products = await Promise.all([
     // Fruits & Vegetables
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Fresh Apples',
-        description: 'Sweet and crisp red apples',
-        sku: 'FRUITS-APPLE-001',
-        barcode: '1234567890123',
-        price: 2.99,
-        costPrice: 1.50,
-        stockQuantity: 50,
-        minStockLevel: 10,
-        unit: 'kg',
-        weight: 1000,
-        images: ['https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6'],
-        categoryId: categories[0].id,
-        storeId: store.id,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Organic Bananas',
-        description: 'Fresh organic bananas',
-        sku: 'FRUITS-BANANA-001',
-        barcode: '1234567890124',
-        price: 1.99,
-        costPrice: 0.80,
-        stockQuantity: 75,
-        minStockLevel: 15,
-        unit: 'kg',
-        weight: 1000,
-        images: ['https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e'],
-        categoryId: categories[0].id,
-        storeId: store.id,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Fresh Tomatoes',
-        description: 'Ripe red tomatoes',
-        sku: 'VEG-TOMATO-001',
-        barcode: '1234567890125',
-        price: 3.49,
-        costPrice: 1.75,
-        stockQuantity: 30,
-        minStockLevel: 8,
-        unit: 'kg',
-        weight: 1000,
-        images: ['https://images.unsplash.com/photo-1546094096-0df4bcaaa337'],
-        categoryId: categories[0].id,
-        storeId: store.id,
-      },
-    }),
-
-    // Dairy & Eggs
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Fresh Milk',
-        description: 'Whole milk, 1 liter',
-        sku: 'DAIRY-MILK-001',
-        barcode: '1234567890126',
-        price: 2.49,
-        costPrice: 1.20,
-        stockQuantity: 40,
-        minStockLevel: 12,
-        unit: 'liters',
-        weight: 1000,
-        images: ['https://images.unsplash.com/photo-1550583724-b2692b85b150'],
-        categoryId: categories[1].id,
-        storeId: store.id,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Fresh Eggs',
-        description: 'Farm fresh eggs, 12 count',
-        sku: 'DAIRY-EGGS-001',
-        barcode: '1234567890127',
-        price: 4.99,
-        costPrice: 2.50,
-        stockQuantity: 25,
-        minStockLevel: 6,
+    prisma.inventoryItem.upsert({
+      where: { sku: 'BANANA-001' },
+      update: {},
+      create: {
+        name: 'Fresh Bananas',
+        description: 'Fresh yellow bananas, perfect for snacking',
+        sku: 'BANANA-001',
+        price: 60.00,
+        costPrice: 45.00,
+        stockQuantity: 100,
         unit: 'dozen',
-        weight: 600,
-        images: ['https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f'],
-        categoryId: categories[1].id,
+        weight: 1200,
+        images: ['https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400'],
+        brand: 'Organic',
+        tags: ['organic', 'fresh', 'fruits'],
+        categoryId: categories[0].id,
         storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        isFeatured: true,
+        rating: 4.5,
+        reviewCount: 25,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'TOMATO-001' },
+      update: {},
+      create: {
+        name: 'Fresh Tomatoes',
+        description: 'Fresh red tomatoes, perfect for cooking',
+        sku: 'TOMATO-001',
+        price: 40.00,
+        costPrice: 30.00,
+        stockQuantity: 50,
+        unit: 'kg',
+        weight: 1000,
+        images: ['https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=400'],
+        brand: 'Fresh Farm',
+        tags: ['fresh', 'vegetables'],
+        categoryId: categories[0].id,
+        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        rating: 4.2,
+        reviewCount: 18,
       },
     }),
 
-    // Bread & Bakery
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Whole Wheat Bread',
-        description: 'Fresh whole wheat bread',
-        sku: 'BAKERY-BREAD-001',
-        barcode: '1234567890128',
-        price: 3.99,
-        costPrice: 1.80,
-        stockQuantity: 20,
-        minStockLevel: 5,
-        unit: 'loaf',
-        weight: 500,
-        images: ['https://images.unsplash.com/photo-1509440159596-0249088772ff'],
+    // Dairy & Bakery
+    prisma.inventoryItem.upsert({
+      where: { sku: 'MILK-001' },
+      update: {},
+      create: {
+        name: 'Amul Taaza Milk',
+        description: 'Fresh full cream milk, 1 litre',
+        sku: 'MILK-001',
+        price: 58.00,
+        costPrice: 45.00,
+        stockQuantity: 200,
+        unit: 'litre',
+        weight: 1000,
+        images: ['https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400'],
+        brand: 'Amul',
+        tags: ['dairy', 'fresh', 'milk'],
+        categoryId: categories[1].id,
+        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        isFeatured: true,
+        rating: 4.7,
+        reviewCount: 45,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'BREAD-001' },
+      update: {},
+      create: {
+        name: 'Britannia Brown Bread',
+        description: 'Whole wheat brown bread, 400g',
+        sku: 'BREAD-001',
+        price: 35.00,
+        costPrice: 25.00,
+        stockQuantity: 75,
+        unit: 'packet',
+        weight: 400,
+        images: ['https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400'],
+        brand: 'Britannia',
+        tags: ['bakery', 'bread', 'whole wheat'],
+        categoryId: categories[1].id,
+        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        rating: 4.3,
+        reviewCount: 32,
+      },
+    }),
+
+    // Staples
+    prisma.inventoryItem.upsert({
+      where: { sku: 'RICE-001' },
+      update: {},
+      create: {
+        name: 'India Gate Basmati Rice',
+        description: 'Premium basmati rice, 2kg pack',
+        sku: 'RICE-001',
+        price: 180.00,
+        costPrice: 140.00,
+        stockQuantity: 60,
+        unit: 'kg',
+        weight: 2000,
+        images: ['https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400'],
+        brand: 'India Gate',
+        tags: ['rice', 'basmati', 'premium'],
         categoryId: categories[2].id,
         storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        isFeatured: true,
+        rating: 4.6,
+        reviewCount: 28,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'ATTA-001' },
+      update: {},
+      create: {
+        name: 'Aashirvaad Atta',
+        description: 'Whole wheat atta, 5kg pack',
+        sku: 'ATTA-001',
+        price: 220.00,
+        costPrice: 180.00,
+        stockQuantity: 40,
+        unit: 'kg',
+        weight: 5000,
+        images: ['https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400'],
+        brand: 'Aashirvaad',
+        tags: ['atta', 'wheat', 'whole wheat'],
+        categoryId: categories[2].id,
+        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        rating: 4.4,
+        reviewCount: 22,
       },
     }),
 
     // Beverages
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Orange Juice',
-        description: 'Fresh orange juice, 1 liter',
-        sku: 'BEV-JUICE-001',
-        barcode: '1234567890129',
-        price: 3.99,
-        costPrice: 2.00,
-        stockQuantity: 35,
-        minStockLevel: 10,
-        unit: 'liters',
+    prisma.inventoryItem.upsert({
+      where: { sku: 'WATER-001' },
+      update: {},
+      create: {
+        name: 'Bisleri Water',
+        description: 'Pure drinking water, 1 litre bottle',
+        sku: 'WATER-001',
+        price: 20.00,
+        costPrice: 12.00,
+        stockQuantity: 300,
+        unit: 'bottle',
         weight: 1000,
-        images: ['https://images.unsplash.com/photo-1621506289937-a8e4df240d0b'],
+        images: ['https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400'],
+        brand: 'Bisleri',
+        tags: ['water', 'drinking', 'pure'],
         categoryId: categories[3].id,
         storeId: store.id,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Coca Cola',
-        description: 'Coca Cola, 2 liter bottle',
-        sku: 'BEV-COLA-001',
-        barcode: '1234567890130',
-        price: 2.49,
-        costPrice: 1.25,
-        stockQuantity: 45,
-        minStockLevel: 12,
-        unit: 'bottles',
-        weight: 2000,
-        images: ['https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b'],
-        categoryId: categories[3].id,
-        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        rating: 4.1,
+        reviewCount: 15,
       },
     }),
 
-    // Snacks
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Potato Chips',
-        description: 'Classic potato chips, 200g',
-        sku: 'SNACK-CHIPS-001',
-        barcode: '1234567890131',
-        price: 2.99,
-        costPrice: 1.50,
-        stockQuantity: 60,
-        minStockLevel: 15,
-        unit: 'bags',
-        weight: 200,
-        images: ['https://images.unsplash.com/photo-1566478989037-eec170784d0b'],
+    // Personal Care
+    prisma.inventoryItem.upsert({
+      where: { sku: 'SOAP-001' },
+      update: {},
+      create: {
+        name: 'Lux Soap',
+        description: 'Luxury bathing soap, 75g',
+        sku: 'SOAP-001',
+        price: 25.00,
+        costPrice: 18.00,
+        stockQuantity: 150,
+        unit: 'piece',
+        weight: 75,
+        images: ['https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400'],
+        brand: 'Lux',
+        tags: ['soap', 'bathing', 'personal care'],
         categoryId: categories[4].id,
         storeId: store.id,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        name: 'Chocolate Cookies',
-        description: 'Delicious chocolate cookies, 300g',
-        sku: 'SNACK-COOKIES-001',
-        barcode: '1234567890132',
-        price: 4.49,
-        costPrice: 2.25,
-        stockQuantity: 30,
-        minStockLevel: 8,
-        unit: 'packets',
-        weight: 300,
-        images: ['https://images.unsplash.com/photo-1499636136210-6f4ee915583e'],
-        categoryId: categories[4].id,
-        storeId: store.id,
+        isActive: true,
+        isAvailable: true,
+        rating: 4.0,
+        reviewCount: 12,
       },
     }),
   ]);
 
-  console.log('📦 Created inventory items');
-
-  // Create a sample order
-  const order = await prisma.order.create({
-    data: {
-      orderNumber: 'ORD-2024-001',
-      status: 'CONFIRMED',
-      subtotal: 15.95,
-      tax: 1.60,
-      deliveryFee: 2.99,
-      total: 20.54,
-      deliveryAddress: '456 Oak Street, New York, NY 10002',
-      deliveryInstructions: 'Please ring the doorbell',
-      customerId: customer.id,
-      storeId: store.id,
-    },
-  });
-
-  // Create order items
-  await Promise.all([
-    prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        inventoryItemId: inventoryItems[0].id, // Apples
-        quantity: 2,
-        unitPrice: 2.99,
-        total: 5.98,
-      },
-    }),
-    prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        inventoryItemId: inventoryItems[3].id, // Milk
-        quantity: 1,
-        unitPrice: 2.49,
-        total: 2.49,
-      },
-    }),
-    prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        inventoryItemId: inventoryItems[5].id, // Bread
-        quantity: 1,
-        unitPrice: 3.99,
-        total: 3.99,
-      },
-    }),
-    prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        inventoryItemId: inventoryItems[8].id, // Chips
-        quantity: 1,
-        unitPrice: 2.99,
-        total: 2.99,
-      },
-    }),
-  ]);
-
-  console.log('📋 Created sample order');
-
-  // Create a bot session
-  const botSession = await prisma.botSession.create({
-    data: {
-      sessionId: 'BOT-SESSION-001',
-      status: 'ACTIVE',
-      agentId: botAgent.id,
-      orderId: order.id,
-    },
-  });
-
-  // Create bot messages
-  await Promise.all([
-    prisma.botMessage.create({
-      data: {
-        sessionId: botSession.id,
-        content: 'Hello! I need to place an order for some groceries.',
-        type: 'USER',
-        metadata: {
-          parsedItems: [
-            { name: 'apples', quantity: 2, unit: 'kg' },
-            { name: 'milk', quantity: 1, unit: 'liter' },
-            { name: 'bread', quantity: 1, unit: 'loaf' },
-            { name: 'chips', quantity: 1, unit: 'bag' },
-          ],
-        },
-      },
-    }),
-    prisma.botMessage.create({
-      data: {
-        sessionId: botSession.id,
-        content: 'I\'ve found all the items you requested. Here\'s your order summary:\n\n• Fresh Apples (2 kg) - $5.98\n• Fresh Milk (1 liter) - $2.49\n• Whole Wheat Bread (1 loaf) - $3.99\n• Potato Chips (1 bag) - $2.99\n\nSubtotal: $15.45\nTax: $1.60\nDelivery Fee: $2.99\nTotal: $20.04\n\nWould you like me to confirm this order?',
-        type: 'BOT',
-        metadata: {
-          orderPreview: {
-            items: [
-              { name: 'Fresh Apples', quantity: 2, unitPrice: 2.99, total: 5.98 },
-              { name: 'Fresh Milk', quantity: 1, unitPrice: 2.49, total: 2.49 },
-              { name: 'Whole Wheat Bread', quantity: 1, unitPrice: 3.99, total: 3.99 },
-              { name: 'Potato Chips', quantity: 1, unitPrice: 2.99, total: 2.99 },
-            ],
-            subtotal: 15.45,
-            tax: 1.60,
-            deliveryFee: 2.99,
-            total: 20.04,
-          },
-        },
-      },
-    }),
-    prisma.botMessage.create({
-      data: {
-        sessionId: botSession.id,
-        content: 'Yes, please confirm the order.',
-        type: 'USER',
-      },
-    }),
-    prisma.botMessage.create({
-      data: {
-        sessionId: botSession.id,
-        content: 'Perfect! Your order has been confirmed and is being prepared. Order number: ORD-2024-001. Estimated delivery time: 30-45 minutes. Thank you for using our service!',
-        type: 'BOT',
-        metadata: {
-          orderConfirmed: true,
-          orderNumber: 'ORD-2024-001',
-          estimatedDelivery: '30-45 minutes',
-        },
-      },
-    }),
-  ]);
-
-  console.log('🤖 Created bot session and messages');
-
-  console.log('✅ Database seeding completed successfully!');
-  console.log('\n📊 Sample Data Summary:');
-  console.log(`• Users: ${await prisma.user.count()}`);
-  console.log(`• Store: ${await prisma.store.count()}`);
-  console.log(`• Categories: ${await prisma.category.count()}`);
-  console.log(`• Inventory Items: ${await prisma.inventoryItem.count()}`);
-  console.log(`• Orders: ${await prisma.order.count()}`);
-  console.log(`• Bot Sessions: ${await prisma.botSession.count()}`);
-  console.log(`• Bot Messages: ${await prisma.botMessage.count()}`);
-
-  console.log('\n🔑 Test Credentials:');
-  console.log('Admin: admin@quickcommerce.com / password123');
-  console.log('Manager: manager@quickcommerce.com / password123');
-  console.log('Agent: bot@quickcommerce.com / password123');
-  console.log('Customer: customer@quickcommerce.com / password123');
-  console.log('Delivery: delivery@quickcommerce.com / password123');
-
-  console.log('\n🆔 Sample IDs for Testing:');
-  console.log(`Store ID: ${store.id}`);
-  console.log(`Bot Agent ID: ${botAgent.id}`);
-  console.log(`Customer ID: ${customer.id}`);
-  console.log(`Sample Order ID: ${order.id}`);
-  console.log(`Bot Session ID: ${botSession.id}`);
+  console.log('✅ Database seeded successfully!');
+  console.log(`👥 Created ${await prisma.user.count()} users`);
+  console.log(`🏪 Created ${await prisma.store.count()} stores`);
+  console.log(`📂 Created ${await prisma.category.count()} categories`);
+  console.log(`🛍️ Created ${await prisma.inventoryItem.count()} products`);
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error during seeding:', e);
+    console.error('❌ Error seeding database:', e);
     process.exit(1);
   })
   .finally(async () => {

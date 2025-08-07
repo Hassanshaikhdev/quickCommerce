@@ -3,9 +3,15 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  password: string;
+  password?: string;
   role: UserRole;
   isActive: boolean;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  avatar?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,8 +29,27 @@ export interface Store {
   zipCode: string;
   phone: string;
   email: string;
+  logo?: string;
+  banner?: string;
   isActive: boolean;
   managerId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Category Types
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string;
+  slug: string;
+  parentId?: string;
+  isActive: boolean;
+  sortOrder: number;
+  storeId: string;
+  parent?: Category;
+  children?: Category[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,19 +71,25 @@ export interface InventoryItem {
   images: string[];
   isActive: boolean;
   isAvailable: boolean;
+  isFeatured: boolean;
+  brand?: string;
+  tags: string[];
+  rating: number;
+  reviewCount: number;
   storeId: string;
   categoryId: string;
+  category?: Category;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface Category {
+// Cart Types
+export interface CartItem {
   id: string;
-  name: string;
-  description?: string;
-  image?: string;
-  isActive: boolean;
-  storeId: string;
+  quantity: number;
+  userId: string;
+  inventoryItemId: string;
+  inventoryItem?: InventoryItem;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,8 +108,13 @@ export interface Order {
   estimatedDelivery?: Date;
   actualDelivery?: Date;
   notes?: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
   customerId: string;
   storeId: string;
+  customer?: User;
+  store?: Store;
+  items?: OrderItem[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -87,6 +123,7 @@ export interface OrderItem {
   id: string;
   orderId: string;
   inventoryItemId: string;
+  inventoryItem?: InventoryItem;
   quantity: number;
   unitPrice: number;
   total: number;
@@ -104,6 +141,34 @@ export type OrderStatus =
   | 'CANCELLED'
   | 'REFUNDED';
 
+export type PaymentMethod = 
+  | 'CASH_ON_DELIVERY'
+  | 'CREDIT_CARD'
+  | 'DEBIT_CARD'
+  | 'UPI'
+  | 'NET_BANKING'
+  | 'WALLET';
+
+export type PaymentStatus = 
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REFUNDED';
+
+// Review Types
+export interface Review {
+  id: string;
+  rating: number;
+  comment?: string;
+  isVerified: boolean;
+  userId: string;
+  inventoryItemId: string;
+  user?: User;
+  inventoryItem?: InventoryItem;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Bot Types
 export interface BotMessage {
   id: string;
@@ -120,6 +185,9 @@ export interface BotSession {
   status: BotSessionStatus;
   agentId: string;
   orderId?: string;
+  agent?: User;
+  order?: Order;
+  messages?: BotMessage[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -197,6 +265,7 @@ export interface Notification {
   message: string;
   type: NotificationType;
   isRead: boolean;
+  user?: User;
   createdAt: Date;
 }
 
@@ -211,8 +280,10 @@ export interface SearchFilters {
     max: number;
   };
   inStock?: boolean;
-  sortBy?: 'name' | 'price' | 'popularity' | 'newest';
+  sortBy?: 'name' | 'price' | 'popularity' | 'newest' | 'rating';
   sortOrder?: 'asc' | 'desc';
+  brand?: string;
+  tags?: string[];
 }
 
 // Form Types
@@ -225,7 +296,12 @@ export interface RegisterForm {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  role?: UserRole;
 }
 
 export interface OrderForm {
@@ -237,6 +313,12 @@ export interface OrderForm {
   }>;
   deliveryAddress: string;
   deliveryInstructions?: string;
+  paymentMethod?: PaymentMethod;
+}
+
+export interface CartForm {
+  itemId: string;
+  quantity: number;
 }
 
 // Utility Types
@@ -246,4 +328,24 @@ export interface ErrorState {
   message: string;
   code?: string;
   details?: any;
+}
+
+// Component Props Types
+export interface ProductCardProps {
+  product: InventoryItem;
+  onAddToCart?: (itemId: string, quantity: number) => void;
+  onViewDetails?: (itemId: string) => void;
+}
+
+export interface CartSummaryProps {
+  items: CartItem[];
+  onUpdateQuantity?: (itemId: string, quantity: number) => void;
+  onRemoveItem?: (itemId: string) => void;
+  onCheckout?: () => void;
+}
+
+export interface ProductFiltersProps {
+  filters: SearchFilters;
+  onFiltersChange: (filters: SearchFilters) => void;
+  categories: Category[];
 } 

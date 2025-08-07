@@ -53,7 +53,8 @@ export async function POST(request: NextRequest) {
     // Generate JWT token
     const token = generateToken(user);
 
-    return NextResponse.json({
+    // Create response with cookie
+    const response = NextResponse.json({
       success: true,
       data: {
         user,
@@ -61,6 +62,16 @@ export async function POST(request: NextRequest) {
       },
       message: 'User registered successfully',
     });
+
+    // Set cookie
+    response.cookies.set('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return response;
   } catch (error) {
     console.error('Error registering user:', error);
     

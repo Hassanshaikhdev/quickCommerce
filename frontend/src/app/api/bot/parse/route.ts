@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { botService } from '@/lib/bot';
-import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 
@@ -43,14 +42,19 @@ export async function POST(request: NextRequest) {
     // Parse the order request using the bot service
     const parsedOrder = await botService.parseOrderRequest(message, storeId, agentId);
 
-    // Save the bot message
-    await botService.saveBotMessage(
-      'temp-session', // You might want to create a proper session
-      agentId,
-      storeId,
-      message,
-      'USER'
-    );
+    // Save the bot message (optional - can be skipped if session doesn't exist)
+    try {
+      await botService.saveBotMessage(
+        `session-${Date.now()}`, // Create a unique session ID
+        agentId,
+        storeId,
+        message,
+        'USER'
+      );
+    } catch (error) {
+      console.error('Error saving bot message:', error);
+      // Continue even if saving fails
+    }
 
     return NextResponse.json({
       success: true,
